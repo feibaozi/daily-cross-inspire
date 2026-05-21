@@ -1,0 +1,38 @@
+ai:
+  api_base: "https://api.deepseek.com/v1"
+  api_key: "${DEEPSEEK_API_KEY}"
+  model: "deepseek-chat"
+  max_tokens: 800
+  temperature: 0.8
+
+collection:
+  select_count: 3
+  max_articles_per_feed: 5
+  lookback_days: 7
+  request_timeout: 15
+  user_agent: "DailyCrossInspire/1.0 (daily-reader-bot)"
+  min_article_length: 200
+
+push:
+  feishu:
+    enabled: true
+    webhook_url: "${FEISHU_WEBHOOK_URL}"
+  dingtalk:
+    enabled: false
+    webhook_url: "${DINGTALK_WEBHOOK_URL}"
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    sender: "${EMAIL_SENDER}"
+    password: "${EMAIL_PASSWORD}"
+    recipient: "${EMAIL_RECIPIENT}"
+
+schedule:
+  timezone: "Asia/Shanghai"
+  push_hour: 8
+  push_minute: 0
+
+cache:
+  db_path: "data/cache.db"
+  retention_days: 30

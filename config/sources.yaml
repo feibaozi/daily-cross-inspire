@@ -1,0 +1,103 @@
+domains:
+  - name: "量子物理"
+    feeds:
+      - "https://rss.arxiv.org/rss/quant-ph"
+      - "https://rsshub.app/quantamagazine/physics"
+    weight: 2
+    icon: "⚛️"
+
+  - name: "中世纪欧洲史"
+    feeds:
+      - "https://www.medievalists.net/feed/"
+      - "https://feeds.feedburner.com/medievalhistories"
+    weight: 4
+    icon: "🏰"
+
+  - name: "前卫建筑设计"
+    feeds:
+      - "https://www.dezeen.com/feed/"
+      - "https://www.archdaily.com/feed"
+    weight: 5
+    icon: "🏗️"
+
+  - name: "认知神经科学"
+    feeds:
+      - "https://rss.arxiv.org/rss/q-bio.NC"
+      - "https://www.sciencedaily.com/rss/mind_brain/neuroscience.xml"
+    weight: 4
+    icon: "🧠"
+
+  - name: "海洋生物学"
+    feeds:
+      - "https://www.sciencedaily.com/rss/plants_animals/marine_biology.xml"
+      - "https://rss.arxiv.org/rss/q-bio.PE"
+    weight: 5
+    icon: "🌊"
+
+  - name: "古代哲学"
+    feeds:
+      - "https://rsshub.app/aeon/philosophy"
+      - "https://dailynous.com/feed/"
+    weight: 3
+    icon: "🏛️"
+
+  - name: "演化生物学"
+    feeds:
+      - "https://www.sciencedaily.com/rss/plants_animals/evolution.xml"
+      - "https://rss.arxiv.org/rss/q-bio.PE"
+    weight: 4
+    icon: "🧬"
+
+  - name: "材料科学"
+    feeds:
+      - "https://rss.arxiv.org/rss/cond-mat.mtrl-sci"
+      - "https://www.sciencedaily.com/rss/matter_energy/materials_science.xml"
+    weight: 5
+    icon: "🔬"
+
+  - name: "气候科学"
+    feeds:
+      - "https://www.sciencedaily.com/rss/earth_climate/climate.xml"
+      - "https://feeds.feedburner.com/RealClimate"
+    weight: 4
+    icon: "🌍"
+
+  - name: "语言学"
+    feeds:
+      - "https://languagelog.ldc.upenn.edu/nll/?feed=rss2"
+    weight: 3
+    icon: "📜"
+
+  - name: "天文学"
+    feeds:
+      - "https://rss.arxiv.org/rss/astro-ph"
+      - "https://www.sciencedaily.com/rss/space_time/astronomy.xml"
+    weight: 4
+    icon: "🔭"
+
+  - name: "考古学"
+    feeds:
+      - "https://www.sciencedaily.com/rss/fossils_ruins/archaeology.xml"
+      - "https://feeds.feedburner.com/ancientorigins"
+    weight: 3
+    icon: "⚱️"
+
+  - name: "机器人学"
+    feeds:
+      - "https://rss.arxiv.org/rss/cs.RO"
+      - "https://www.sciencedaily.com/rss/computers_math/robotics.xml"
+    weight: 5
+    icon: "🤖"
+
+  - name: "古生物学"
+    feeds:
+      - "https://www.sciencedaily.com/rss/fossils_ruins/paleontology.xml"
+      - "https://rss.arxiv.org/rss/q-bio.PE"
+    weight: 3
+    icon: "🦴"
+
+  - name: "音乐学"
+    feeds:
+      - "https://www.sciencedaily.com/rss/mind_brain/music.xml"
+    weight: 2
+    icon: "🎵"
