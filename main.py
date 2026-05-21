@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from src.collector import RSSCollector
 from src.selector import DomainSelector
@@ -35,7 +35,7 @@ def _resolve_env(value: str) -> str:
 
 
 def load_config() -> tuple[dict, dict]:
-    base = Path(__file__).resolve().parent.parent
+    base = Path(__file__).resolve().parent
     sources_path = base / "config" / "sources.yaml"
     settings_path = base / "config" / "settings.yaml"
 
