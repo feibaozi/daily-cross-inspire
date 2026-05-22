@@ -38,6 +38,17 @@ class Article:
 
 
 @dataclass
+class FeedHealth:
+    feed_url: str
+    domain_name: str
+    consecutive_failures: int
+    total_fetches: int
+    total_failures: int
+    last_success: Optional[str]
+    degraded: bool
+
+
+@dataclass
 class Domain:
     name: str
     feeds: list[str]
@@ -47,15 +58,20 @@ class Domain:
 
 
 class RSSCollector:
-    def __init__(self, config: dict, cache_db_path: str = "data/cache.db"):
+    def __init__(self, config: dict, cache_db_path: str = "data/cache.db",
+                 degrade_threshold: int = 3):
         self.timeout = config.get("request_timeout", 15)
         self.max_per_feed = config.get("max_articles_per_feed", 5)
         self.min_length = config.get("min_article_length", 200)
         self.user_agent = config.get("user_agent", "DailyCrossInspire/1.0")
         self.lookback_days = config.get("lookback_days", 7)
         self.cache_db_path = cache_db_path
+        self.degrade_threshold = degrade_threshold
         self._seen_urls: set[str] = set()
+        self._feed_statuses: dict[str, bool] = {}
+        self._feed_article_counts: dict[str, int] = {}
         self._load_seen_urls()
+        self._init_health_db()
 
     def _load_seen_urls(self):
         import sqlite3
@@ -70,6 +86,26 @@ class RSSCollector:
         self._seen_urls = {row[0] for row in rows}
         conn.close()
         logger.info(f"Loaded {len(self._seen_urls)} cached URLs from history")
+
+    def _init_health_db(self):
+        import sqlite3
+        import os
+
+        os.makedirs(os.path.dirname(self.cache_db_path), exist_ok=True)
+        conn = sqlite3.connect(self.cache_db_path)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS feed_health (
+                feed_url TEXT PRIMARY KEY,
+                domain_name TEXT NOT NULL,
+                consecutive_failures INTEGER DEFAULT 0,
+                total_fetches INTEGER DEFAULT 0,
+                total_failures INTEGER DEFAULT 0,
+                last_success TEXT,
+                last_check TEXT,
+                degraded INTEGER DEFAULT 0
+            )"""
+        )
+        conn.close()
 
     def _mark_seen(self, url: str):
         import sqlite3
@@ -90,6 +126,73 @@ class RSSCollector:
         conn.execute("DELETE FROM seen_articles WHERE seen_at < ?", (cutoff,))
         conn.commit()
         conn.close()
+
+    def _record_feed_status(self, feed_url: str, domain_name: str,
+                            success: bool, article_count: int = 0):
+        import sqlite3
+
+        conn = sqlite3.connect(self.cache_db_path)
+        now = datetime.now().isoformat()
+
+        existing = conn.execute(
+            "SELECT consecutive_failures, total_fetches, total_failures FROM feed_health WHERE feed_url = ?",
+            (feed_url,)
+        ).fetchone()
+
+        if existing is None:
+            if success:
+                conn.execute(
+                    "INSERT INTO feed_health (feed_url, domain_name, consecutive_failures, total_fetches, total_failures, last_success, last_check, degraded) VALUES (?, ?, 0, 1, 0, ?, ?, 0)",
+                    (feed_url, domain_name, now, now)
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO feed_health (feed_url, domain_name, consecutive_failures, total_fetches, total_failures, last_check, degraded) VALUES (?, ?, 1, 1, 1, ?, 0)",
+                    (feed_url, domain_name, now)
+                )
+        else:
+            cons_fails, total_fetches, total_fails = existing
+            total_fetches += 1
+            if success:
+                cons_fails = 0
+                degraded = 0
+                conn.execute(
+                    "UPDATE feed_health SET consecutive_failures=0, total_fetches=?, total_failures=?, last_success=?, last_check=?, degraded=0 WHERE feed_url=?",
+                    (total_fetches, total_fails, now, now, feed_url)
+                )
+            else:
+                cons_fails += 1
+                total_fails += 1
+                degraded = 1 if cons_fails >= self.degrade_threshold else 0
+                conn.execute(
+                    "UPDATE feed_health SET consecutive_failures=?, total_fetches=?, total_failures=?, last_check=?, degraded=? WHERE feed_url=?",
+                    (cons_fails, total_fetches, total_fails, now, degraded, feed_url)
+                )
+
+        conn.commit()
+        conn.close()
+
+    def get_health_report(self) -> list[FeedHealth]:
+        import sqlite3
+
+        conn = sqlite3.connect(self.cache_db_path)
+        rows = conn.execute(
+            "SELECT feed_url, domain_name, consecutive_failures, total_fetches, total_failures, last_success, degraded FROM feed_health ORDER BY degraded DESC, consecutive_failures DESC"
+        ).fetchall()
+        conn.close()
+
+        report = []
+        for row in rows:
+            report.append(FeedHealth(
+                feed_url=row[0],
+                domain_name=row[1],
+                consecutive_failures=row[2],
+                total_fetches=row[3],
+                total_failures=row[4],
+                last_success=row[5],
+                degraded=bool(row[6]),
+            ))
+        return report
 
     async def _fetch_feed(self, client: httpx.AsyncClient, feed_url: str) -> list[dict]:
         try:
@@ -115,12 +218,18 @@ class RSSCollector:
                     "published": published,
                 })
             logger.debug(f"Fetched {len(articles)} new articles from {feed_url}")
+            self._feed_statuses[feed_url] = True
+            self._feed_article_counts[feed_url] = len(articles)
             return articles
         except httpx.HTTPStatusError as e:
             logger.warning(f"HTTP {e.response.status_code} from {feed_url}")
+            self._feed_statuses[feed_url] = False
+            self._feed_article_counts[feed_url] = 0
             return []
         except Exception as e:
             logger.warning(f"Failed to fetch {feed_url}: {e}")
+            self._feed_statuses[feed_url] = False
+            self._feed_article_counts[feed_url] = 0
             return []
 
     async def collect_from_domain(self, domain: dict) -> Domain:
@@ -141,6 +250,10 @@ class RSSCollector:
 
         seen_in_batch: set[str] = set()
         for feed_url, entries in zip(domain_obj.feeds, results):
+            status = self._feed_statuses.get(feed_url, False)
+            count = self._feed_article_counts.get(feed_url, 0)
+            self._record_feed_status(feed_url, domain_obj.name, status, count)
+
             for entry in entries:
                 if entry["url"] in seen_in_batch:
                     continue
@@ -166,6 +279,9 @@ class RSSCollector:
 
     async def collect_all(self, domains_config: list[dict]) -> list[Domain]:
         logger.info(f"Starting collection from {len(domains_config)} domains...")
+        self._feed_statuses.clear()
+        self._feed_article_counts.clear()
+
         tasks = [self.collect_from_domain(d) for d in domains_config]
         domains = await asyncio.gather(*tasks)
         total = sum(len(d.articles) for d in domains)

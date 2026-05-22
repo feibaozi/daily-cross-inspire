@@ -12,6 +12,7 @@ collection:
   request_timeout: 15
   user_agent: "DailyCrossInspire/1.0 (daily-reader-bot)"
   min_article_length: 200
+  degrade_threshold: 3
 
 push:
   feishu:

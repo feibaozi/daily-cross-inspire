@@ -1,0 +1,147 @@
+import json
+import sqlite3
+from datetime import datetime, timezone, timedelta
+
+
+def generate_site(cache_db_path: str = "data/cache.db",
+                  output_path: str = "site/index.html",
+                  timezone_str: str = "Asia/Shanghai"):
+    import os
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    articles = _load_articles(cache_db_path, timezone_str)
+    articles_json = json.dumps(articles, ensure_ascii=False)
+
+    html = _build_html(articles_json, len(articles))
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+
+def _load_articles(cache_db_path: str, timezone_str: str) -> list[dict]:
+    conn = sqlite3.connect(cache_db_path)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS weekly_archive ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  title TEXT, url TEXT, domain_name TEXT, domain_icon TEXT,"
+        "  chinese_summary TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        ")"
+    )
+    rows = conn.execute(
+        "SELECT title, url, domain_name, domain_icon, chinese_summary, created_at "
+        "FROM weekly_archive ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+
+    offset = {"Asia/Shanghai": 8, "Asia/Tokyo": 9}.get(timezone_str, 8)
+
+    articles = []
+    for row in rows:
+        created = row[5]
+        if created:
+            try:
+                dt = datetime.fromisoformat(created)
+                created = (dt + timedelta(hours=offset)).strftime("%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                pass
+        articles.append({
+            "title": row[0],
+            "url": row[1] or "#",
+            "domain": row[2] or "",
+            "icon": row[3] or "",
+            "summary": row[4] or "",
+            "date": created or "",
+        })
+    return articles
+
+
+def _build_html(articles_json: str, total: int) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日跨界灵感 · 知识库</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f0f1a; color: #e0e0e0; line-height: 1.8; }}
+header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 40px 20px; text-align: center; border-bottom: 1px solid #2a2a4a; }}
+header h1 {{ font-size: 28px; color: #fff; }}
+header p {{ color: #888; margin-top: 8px; }}
+.toolbar {{ display: flex; gap: 12px; padding: 20px; max-width: 800px; margin: 0 auto; flex-wrap: wrap; justify-content: center; }}
+.toolbar input {{ flex: 1; min-width: 200px; padding: 10px 16px; border: 1px solid #333; border-radius: 8px; background: #1a1a2e; color: #fff; font-size: 14px; outline: none; }}
+.toolbar input:focus {{ border-color: #4a9eff; }}
+.toolbar select {{ padding: 10px 16px; border: 1px solid #333; border-radius: 8px; background: #1a1a2e; color: #fff; font-size: 14px; cursor: pointer; }}
+.timeline {{ max-width: 800px; margin: 0 auto; padding: 0 20px 60px; }}
+.card {{ background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 24px; margin-bottom: 16px; transition: border-color 0.2s; }}
+.card:hover {{ border-color: #4a9eff; }}
+.card-header {{ display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }}
+.card-domain {{ font-size: 13px; color: #4a9eff; }}
+.card-date {{ font-size: 12px; color: #666; margin-left: auto; }}
+.card-title {{ font-size: 18px; color: #fff; margin-bottom: 10px; }}
+.card-title a {{ color: #fff; text-decoration: none; }}
+.card-title a:hover {{ text-decoration: underline; }}
+.card-summary {{ font-size: 14px; color: #aaa; }}
+.card-link {{ display: inline-block; margin-top: 12px; font-size: 13px; color: #4a9eff; text-decoration: none; }}
+.empty {{ text-align: center; color: #666; padding: 60px 20px; }}
+footer {{ text-align: center; padding: 20px; color: #555; font-size: 12px; border-top: 1px solid #1a1a2e; }}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌍 每日跨界灵感 · 知识库</h1>
+  <p>已收录 <strong id="total">{total}</strong> 篇文章，跨越多个陌生领域</p>
+</header>
+<div class="toolbar">
+  <input type="text" id="search" placeholder="搜索标题或内容..." oninput="render()">
+  <select id="domainFilter" onchange="render()">
+    <option value="">全部领域</option>
+  </select>
+</div>
+<div class="timeline" id="timeline"></div>
+<footer>由 DailyCrossInspire 自动生成 · 每日更新</footer>
+<script>
+const ARTICLES = {articles_json};
+function getDomains() {{
+  const domains = [...new Set(ARTICLES.map(a => a.domain))].sort();
+  return domains;
+}}
+function render() {{
+  const search = (document.getElementById('search').value || '').toLowerCase();
+  const domain = document.getElementById('domainFilter').value;
+  let filtered = ARTICLES.filter(a => {{
+    if (domain && a.domain !== domain) return false;
+    if (search && !a.title.toLowerCase().includes(search) && !a.summary.toLowerCase().includes(search)) return false;
+    return true;
+  }});
+  document.getElementById('total').textContent = ARTICLES.length;
+  const container = document.getElementById('timeline');
+  if (filtered.length === 0) {{
+    container.innerHTML = '<div class="empty">📭 没有找到匹配的文章</div>';
+    return;
+  }}
+  container.innerHTML = filtered.map(a => `
+    <div class="card">
+      <div class="card-header">
+        <span class="card-domain">${{a.icon}} ${{a.domain}}</span>
+        <span class="card-date">${{a.date}}</span>
+      </div>
+      <div class="card-title"><a href="${{a.url}}" target="_blank">${{a.title}}</a></div>
+      <div class="card-summary">${{a.summary.substring(0, 200)}}...</div>
+      <a class="card-link" href="${{a.url}}" target="_blank">🔗 阅读原文 →</a>
+    </div>
+  `).join('');
+}}
+(function init() {{
+  const domains = getDomains();
+  const select = document.getElementById('domainFilter');
+  domains.forEach(d => {{
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    select.appendChild(opt);
+  }});
+  render();
+}})();
+</script>
+</body>
+</html>"""

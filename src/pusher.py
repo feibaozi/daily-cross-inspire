@@ -1,8 +1,10 @@
+import asyncio
 import json
 import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from typing import Optional
 
 import httpx
 
@@ -12,6 +14,27 @@ logger = logging.getLogger(__name__)
 class FeishuPusher:
     def __init__(self, webhook_url: str):
         self.webhook_url = webhook_url
+
+    @staticmethod
+    def _build_article_actions(article_urls: list[str]) -> dict:
+        buttons = []
+        for i, url in enumerate(article_urls):
+            buttons.append({
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": f"🔗 阅读原文 {i + 1}"},
+                "type": "default",
+                "url": url,
+            })
+        buttons.append({
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": "📤 分享"},
+            "type": "primary",
+            "url": "https://github.com/feibaozi/daily-cross-inspire",
+        })
+        return {
+            "tag": "action",
+            "actions": buttons,
+        }
 
     async def push(self, card: dict) -> bool:
         try:
