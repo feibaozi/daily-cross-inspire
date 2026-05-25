@@ -16,6 +16,11 @@ from src.composer import Composer
 from src.pusher import FeishuPusher, DingTalkPusher, EmailPusher
 from src.weekly import WeeklyCollector, WeeklyAISummarizer, is_sunday
 from src.on_this_day import fetch_on_this_day
+from src.preference import PreferenceEngine
+from src.reading_profile import ReadingProfiler
+from src.deep_dive import DeepDiveGenerator, AutoTagger
+from src.theme_engine import ThemeEngine
+from src.podcast import PodcastGenerator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,7 +62,7 @@ def archive_articles(summarized, cache_db_path):
 
 async def run():
     logger.info("=" * 50)
-    logger.info("DailyCrossInspire - 每日跨界灵感早报")
+    logger.info("DailyCrossInspire v2.0 - 每日跨界灵感早报")
     logger.info("=" * 50)
 
     sources, settings = load_config()
@@ -91,7 +96,12 @@ async def run():
 
     logger.info(f"{len(domains_with_articles)} domains have new articles")
 
-    selector = DomainSelector(select_count=collection_config["select_count"])
+    preference_engine = PreferenceEngine(cache_db_path=cache_config["db_path"])
+
+    selector = DomainSelector(
+        select_count=collection_config["select_count"],
+        preference_engine=preference_engine,
+    )
     picks = selector.select(domains_with_articles)
 
     if not picks:
@@ -117,19 +127,47 @@ async def run():
     if on_this_day:
         cross_connection = (cross_connection or "") + "\n" + on_this_day
 
+    logger.info("Generating auto-tags...")
+    tagger = AutoTagger(ai_summarizer=summarizer)
+    tags = await tagger.tag_batch(summarized)
+    logger.info(f"Tags: {tags}")
+
+    logger.info("Generating deep dives...")
+    deep_dive_gen = DeepDiveGenerator(ai_summarizer=summarizer)
+    deep_dives = await deep_dive_gen.generate_batch(summarized)
+
+    logger.info("Generating reading profile...")
+    profiler = ReadingProfiler(preference_engine=preference_engine, ai_summarizer=summarizer)
+    reading_profile = await profiler.generate_profile()
+
+    theme_engine = ThemeEngine(cache_db_path=cache_config["db_path"])
+    theme_header = theme_engine.get_theme_header()
+
     health_report = collector.get_health_report()
     if health_report:
         degraded_count = sum(1 for h in health_report if h.degraded)
         logger.info(f"Health report: {len(health_report)} feeds tracked, {degraded_count} degraded")
 
     composer = Composer(timezone=timezone)
-    markdown = composer.compose(summarized, health_report, degrade_threshold, cross_connection)
+    markdown = composer.compose(
+        summarized, health_report, degrade_threshold, cross_connection,
+        theme_header=theme_header, tags=tags, deep_dives=deep_dives,
+        reading_profile=reading_profile,
+    )
 
     logger.info("Generated markdown report:\n")
     print(markdown)
     print()
 
-    await do_push(push_config, composer, markdown, summarized, health_report, degrade_threshold)
+    logger.info("Generating podcast...")
+    podcast_gen = PodcastGenerator(ai_summarizer=summarizer)
+    podcast_path = await podcast_gen.generate(summarized, composer._format_date())
+    if podcast_path:
+        logger.info(f"Podcast available at: {podcast_path}")
+
+    await do_push(push_config, composer, markdown, summarized, health_report,
+                  degrade_threshold, theme_header=theme_header, tags=tags,
+                  reading_profile=reading_profile)
 
 
 async def run_weekly(settings, push_config, degrade_threshold):
@@ -158,6 +196,12 @@ async def run_weekly(settings, push_config, degrade_threshold):
     )
     weekly_content = await weekly_summarizer.generate_weekly(week_articles)
 
+    preference_engine = PreferenceEngine(cache_db_path=cache_config["db_path"])
+    profiler = ReadingProfiler(preference_engine=preference_engine, ai_summarizer=None)
+    reading_profile = profiler._generate_static_profile(
+        preference_engine.get_reading_profile(), [], []
+    )
+
     composer = Composer(timezone=timezone)
     markdown = composer.compose_weekly(weekly_content, degrade_threshold=degrade_threshold)
 
@@ -179,14 +223,19 @@ async def run_weekly(settings, push_config, degrade_threshold):
     logger.info("=" * 50)
 
 
-async def do_push(push_config, composer, markdown, summarized, health_report, degrade_threshold):
+async def do_push(push_config, composer, markdown, summarized, health_report,
+                  degrade_threshold, theme_header="", tags=None, reading_profile=""):
     push_results = []
 
     if push_config.get("feishu", {}).get("enabled"):
         webhook = push_config["feishu"]["webhook_url"]
         if webhook:
             logger.info("Pushing to Feishu...")
-            card = composer.compose_feishu_card(summarized, health_report, degrade_threshold)
+            card = composer.compose_feishu_card(
+                summarized, health_report, degrade_threshold,
+                theme_header=theme_header, tags=tags,
+                reading_profile=reading_profile,
+            )
             pusher = FeishuPusher(webhook_url=webhook)
             ok = await pusher.push(card)
             push_results.append(("飞书", ok))

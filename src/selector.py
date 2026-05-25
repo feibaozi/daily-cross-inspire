@@ -1,13 +1,18 @@
 import random
 import logging
+from typing import Optional
+
 from .collector import Domain, Article
+from .preference import PreferenceEngine
 
 logger = logging.getLogger(__name__)
 
 
 class DomainSelector:
-    def __init__(self, select_count: int = 3):
+    def __init__(self, select_count: int = 3,
+                 preference_engine: Optional[PreferenceEngine] = None):
         self.select_count = select_count
+        self.preference_engine = preference_engine
 
     def select(self, domains: list[Domain]) -> list[tuple[Domain, Article]]:
         eligible = [(d, art) for d in domains for art in d.articles]
@@ -22,11 +27,14 @@ class DomainSelector:
         domain_names = list(by_domain.keys())
         random.shuffle(domain_names)
 
-        weights = []
-        for name in domain_names:
-            w = by_domain[name][0][0].weight
-            inv_weight = 1.0 / max(w, 1)
-            weights.append(inv_weight)
+        base_weights = {name: by_domain[name][0][0].weight for name in domain_names}
+
+        if self.preference_engine:
+            adjusted = self.preference_engine.get_adjusted_weights(base_weights)
+            weights = [adjusted.get(name, 1.0 / max(base_weights[name], 1)) for name in domain_names]
+            logger.info(f"Using preference-adjusted weights for {len(domain_names)} domains")
+        else:
+            weights = [1.0 / max(base_weights[name], 1) for name in domain_names]
 
         count = min(self.select_count, len(domain_names))
         selected_domains = random.choices(domain_names, weights=weights, k=count)

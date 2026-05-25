@@ -10,7 +10,7 @@ HEADER_TEMPLATE = """# ☕ 每日跨界灵感早报
 > 今天带你闯入 3 个完全陌生的世界 🌍
 > {date_str}
 
----
+{theme_header}---
 
 """
 
@@ -18,7 +18,7 @@ ARTICLE_TEMPLATE = """## {icon} {domain_name}
 
 {chinese_summary}
 
----
+{tags_line}{deep_dive_section}---
 
 """
 
@@ -95,21 +95,40 @@ class Composer:
     def compose(self, summarized: list[SummarizedArticle],
                 health_report: Optional[list[FeedHealth]] = None,
                 degrade_threshold: int = 3,
-                cross_connection: Optional[str] = None) -> str:
+                cross_connection: Optional[str] = None,
+                theme_header: str = "",
+                tags: Optional[list[list[str]]] = None,
+                deep_dives: Optional[list[str]] = None,
+                reading_profile: str = "") -> str:
         date_str = self._format_date()
-        parts = [HEADER_TEMPLATE.format(date_str=date_str)]
+        parts = [HEADER_TEMPLATE.format(date_str=date_str, theme_header=theme_header)]
 
-        for item in summarized:
+        for i, item in enumerate(summarized):
+            tag_line = ""
+            if tags and i < len(tags) and tags[i]:
+                tag_strs = [f"`{t}`" for t in tags[i]]
+                tag_line = f"\n🏷️ {' '.join(tag_strs)}\n"
+
+            deep_dive_section = ""
+            if deep_dives and i < len(deep_dives) and deep_dives[i]:
+                deep_dive_section = f"\n<details><summary>🔍 深潜解读</summary>\n\n{deep_dives[i]}\n\n</details>\n\n"
+
             parts.append(
                 ARTICLE_TEMPLATE.format(
                     icon=item.domain_icon,
                     domain_name=item.domain_name,
                     chinese_summary=item.chinese_summary,
+                    tags_line=tag_line,
+                    deep_dive_section=deep_dive_section,
                 )
             )
 
         if cross_connection:
             parts.append(cross_connection)
+            parts.append("\n---\n\n")
+
+        if reading_profile:
+            parts.append(reading_profile)
             parts.append("\n---\n\n")
 
         if health_report:
@@ -121,8 +140,15 @@ class Composer:
 
     def compose_feishu_card(self, summarized: list[SummarizedArticle],
                             health_report: Optional[list[FeedHealth]] = None,
-                            degrade_threshold: int = 3) -> dict:
-        markdown = self.compose(summarized, health_report, degrade_threshold)
+                            degrade_threshold: int = 3,
+                            theme_header: str = "",
+                            tags: Optional[list[list[str]]] = None,
+                            reading_profile: str = "") -> dict:
+        markdown = self.compose(
+            summarized, health_report, degrade_threshold,
+            cross_connection=None, theme_header=theme_header,
+            tags=tags, deep_dives=None, reading_profile=reading_profile,
+        )
         date_str = self._format_date()
 
         degraded = [h for h in (health_report or []) if h.degraded]
