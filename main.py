@@ -21,6 +21,8 @@ from src.reading_profile import ReadingProfiler
 from src.deep_dive import DeepDiveGenerator, AutoTagger
 from src.theme_engine import ThemeEngine
 from src.podcast import PodcastGenerator
+from src.echo_chamber import EchoChamberDetector
+from src.galaxy import export_galaxy_data
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,7 +64,7 @@ def archive_articles(summarized, cache_db_path):
 
 async def run():
     logger.info("=" * 50)
-    logger.info("DailyCrossInspire v2.0 - 每日跨界灵感早报")
+    logger.info("DailyCrossInspire v3.0 - 每日跨界灵感早报")
     logger.info("=" * 50)
 
     sources, settings = load_config()
@@ -143,6 +145,12 @@ async def run():
     theme_engine = ThemeEngine(cache_db_path=cache_config["db_path"])
     theme_header = theme_engine.get_theme_header()
 
+    echo_detector = EchoChamberDetector(cache_db_path=cache_config["db_path"])
+    echo_alert = echo_detector.detect_echo_chamber()
+    if echo_alert:
+        logger.info(f"Echo chamber alert: {echo_alert[:60]}...")
+        cross_connection = (cross_connection or "") + "\n\n" + echo_alert
+
     health_report = collector.get_health_report()
     if health_report:
         degraded_count = sum(1 for h in health_report if h.degraded)
@@ -164,6 +172,10 @@ async def run():
     podcast_path = await podcast_gen.generate(summarized, composer._format_date())
     if podcast_path:
         logger.info(f"Podcast available at: {podcast_path}")
+
+    logger.info("Exporting galaxy data...")
+    galaxy_path = export_galaxy_data(cache_db_path=cache_config["db_path"])
+    logger.info(f"Galaxy data exported to: {galaxy_path}")
 
     await do_push(push_config, composer, markdown, summarized, health_report,
                   degrade_threshold, theme_header=theme_header, tags=tags,
@@ -202,6 +214,11 @@ async def run_weekly(settings, push_config, degrade_threshold):
         preference_engine.get_reading_profile(), [], []
     )
 
+    echo_detector = EchoChamberDetector(cache_db_path=cache_config["db_path"])
+    echo_alert = echo_detector.detect_echo_chamber()
+    if echo_alert:
+        weekly_content += "\n\n" + echo_alert
+
     composer = Composer(timezone=timezone)
     markdown = composer.compose_weekly(weekly_content, degrade_threshold=degrade_threshold)
 
@@ -217,6 +234,9 @@ async def run_weekly(settings, push_config, degrade_threshold):
             pusher = FeishuPusher(webhook_url=webhook)
             ok = await pusher.push(card)
             logger.info(f"  {'✅' if ok else '❌'} 飞书: {'成功' if ok else '失败'}")
+
+    logger.info("Exporting galaxy data...")
+    export_galaxy_data(cache_db_path=cache_config["db_path"])
 
     logger.info("=" * 50)
     logger.info("Weekly highlight completed!")
