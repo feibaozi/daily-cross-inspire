@@ -2,5 +2,10 @@ __pycache__/
 *.pyc
 data/cache.db
 .env
+.env.*
+credentials.*
+*.pem
+*.key
+*.p12
 .vscode/
 *.egg-info/
