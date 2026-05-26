@@ -2,7 +2,7 @@ name: Daily Cross Inspiration Report
 
 on:
   schedule:
-    - cron: "0 16 * * *"
+    - cron: "0 23 * * *"
   workflow_dispatch:
 
 permissions:
