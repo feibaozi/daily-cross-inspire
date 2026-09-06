@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>反馈 · 每日跨界灵感</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f0f1a; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 16px; padding: 40px; max-width: 400px; text-align: center; }
+.card h1 { font-size: 48px; margin-bottom: 16px; }
+.card p { color: #aaa; line-height: 1.8; margin-bottom: 8px; }
+.card .domain { color: #4a9eff; font-weight: bold; }
+.card .action-like { color: #4ade80; }
+.card .action-skip { color: #f87171; }
+.card .action-deep_dive { color: #a78bfa; }
+</style>
+</head>
+<body>
+<div class="card" id="content">
+  <h1>⏳</h1>
+  <p>处理中...</p>
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const data = params.get('d');
+if (!data) {
+  document.getElementById('content').innerHTML = '<h1>❌</h1><p>无效的反馈链接</p>';
+} else {
+  try {
+    const payload = JSON.parse(atob(data));
+    const actionLabels = { like: '👍 喜欢', skip: '👎 跳过', deep_dive: '🔍 深潜' };
+    const actionClass = { like: 'action-like', skip: 'action-skip', deep_dive: 'action-deep_dive' };
+    const emojis = { like: '💚', skip: '👋', deep_dive: '🧠' };
+
+    // Store feedback locally
+    const feedbacks = JSON.parse(localStorage.getItem('dc_feedbacks') || '[]');
+    feedbacks.push({ ...payload, timestamp: new Date().toISOString() });
+    localStorage.setItem('dc_feedbacks', JSON.stringify(feedbacks));
+
+    document.getElementById('content').innerHTML = `
+      <h1>${emojis[payload.action] || '✅'}</h1>
+      <p>已记录你的反馈：<span class="${actionClass[payload.action] || ''}">${actionLabels[payload.action] || payload.action}</span></p>
+      <p class="domain">${payload.domain}</p>
+      <p style="margin-top:16px;color:#666;font-size:13px">系统会根据你的偏好调整推荐权重</p>
+    `;
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<h1>❌</h1><p>反馈数据解析失败</p>';
+  }
+}
+</script>
+</body>
+</html>
