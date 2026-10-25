@@ -1,0 +1,24 @@
+{
+  "nodes": [
+    {
+      "id": "量子物理",
+      "icon": "📚",
+      "likes": 1,
+      "skips": 0,
+      "deep_dives": 1,
+      "reads": 0,
+      "score": 5
+    },
+    {
+      "id": "中世纪欧洲史",
+      "icon": "📚",
+      "likes": 0,
+      "skips": 1,
+      "deep_dives": 0,
+      "reads": 0,
+      "score": 0
+    }
+  ],
+  "links": [],
+  "updated_at": "2026-05-26T15:31:41.036257"
+}
