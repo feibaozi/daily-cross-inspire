@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌌 知识星系图 · 跨界灵感</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0a0a1a; color: #e0e0e0; overflow: hidden; }
+canvas { display: block; }
+.header { position: fixed; top: 0; left: 0; right: 0; z-index: 10; background: linear-gradient(to bottom, rgba(10,10,26,0.95), transparent); padding: 20px 30px 40px; pointer-events: none; }
+.header h1 { font-size: 22px; color: #fff; pointer-events: auto; }
+.header p { font-size: 13px; color: #888; margin-top: 4px; }
+.tooltip { position: fixed; background: rgba(26,26,46,0.95); border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px 18px; font-size: 13px; line-height: 1.7; pointer-events: none; z-index: 20; max-width: 280px; backdrop-filter: blur(10px); }
+.tooltip .name { font-size: 16px; font-weight: bold; color: #fff; margin-bottom: 6px; }
+.tooltip .stat { color: #aaa; }
+.tooltip .stat span { color: #4a9eff; font-weight: bold; }
+.legend { position: fixed; bottom: 20px; left: 20px; z-index: 10; background: rgba(26,26,46,0.8); border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px 18px; font-size: 12px; line-height: 2; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.controls { position: fixed; bottom: 20px; right: 20px; z-index: 10; display: flex; gap: 8px; }
+.controls button { background: rgba(26,26,46,0.8); border: 1px solid #2a2a4a; color: #aaa; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+.controls button:hover { border-color: #4a9eff; color: #4a9eff; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🌌 知识星系图</h1>
+  <p>你探索过的每一个领域，都是宇宙中的一颗星</p>
+</div>
+<div class="tooltip" id="tooltip" style="display:none"></div>
+<div class="legend">
+  <div><span class="dot" style="background:#4ade80"></span>喜欢的领域</div>
+  <div><span class="dot" style="background:#4a9eff"></span>探索过的领域</div>
+  <div><span class="dot" style="background:#555"></span>未探索的领域</div>
+  <div style="margin-top:4px;color:#666">节点大小 = 阅读量 · 连线 = 领域关联</div>
+</div>
+<div class="controls">
+  <button onclick="resetZoom()">🔄 重置</button>
+</div>
+<canvas id="canvas"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+let width, height, simulation, nodes, links;
+
+function resize() {
+  width = window.innerWidth;
+  height = window.innerHeight;
+  canvas.width = width * devicePixelRatio;
+  canvas.height = height * devicePixelRatio;
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+fetch('galaxy_data.json')
+  .then(r => r.json())
+  .then(data => init(data))
+  .catch(() => {
+    nodes = [
+      {id:'量子物理',icon:'⚛️',score:5,likes:2,skips:0,deep_dives:1,reads:3},
+      {id:'认知科学',icon:'🧠',score:3,likes:1,skips:0,deep_dives:0,reads:2},
+      {id:'中世纪史',icon:'🏰',score:1,likes:0,skips:1,deep_dives:0,reads:1},
+      {id:'海洋生物',icon:'🌊',score:0,likes:0,skips:0,deep_dives:0,reads:0},
+      {id:'材料科学',icon:'🔬',score:2,likes:1,skips:0,deep_dives:0,reads:1},
+    ];
+    links = [
+      {source:'量子物理',target:'认知科学'},
+      {source:'量子物理',target:'材料科学'},
+      {source:'中世纪史',target:'认知科学'},
+    ];
+    init({nodes, links});
+  });
+
+function init(data) {
+  nodes = data.nodes;
+  links = data.links;
+
+  const maxScore = Math.max(...nodes.map(n => n.score), 1);
+  nodes.forEach(n => {
+    n.radius = 12 + (n.score / maxScore) * 30;
+    n.x = width / 2 + (Math.random() - 0.5) * 200;
+    n.y = height / 2 + (Math.random() - 0.5) * 200;
+  });
+
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(120))
+    .force('charge', d3.forceManyBody().strength(-300))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(d => d.radius + 8))
+    .on('tick', render);
+}
+
+function getColor(node) {
+  if (node.likes > 0 || node.deep_dives > 0) return '#4ade80';
+  if (node.reads > 0) return '#4a9eff';
+  return '#555';
+}
+
+function render() {
+  ctx.clearRect(0, 0, width, height);
+
+  ctx.strokeStyle = 'rgba(74, 158, 255, 0.15)';
+  ctx.lineWidth = 1;
+  links.forEach(link => {
+    ctx.beginPath();
+    ctx.moveTo(link.source.x, link.source.y);
+    ctx.lineTo(link.target.x, link.target.y);
+    ctx.stroke();
+  });
+
+  nodes.forEach(node => {
+    const color = getColor(node);
+
+    if (node.likes > 0) {
+      const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius * 2);
+      gradient.addColorStop(0, color + '40');
+      gradient.addColorStop(1, 'transparent');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = color + '30';
+    ctx.strokeStyle = color + '80';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.max(14, node.radius * 0.7)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(node.icon, node.x, node.y);
+
+    ctx.fillStyle = '#ccc';
+    ctx.font = '11px sans-serif';
+    ctx.fillText(node.id, node.x, node.y + node.radius + 14);
+  });
+}
+
+let hovered = null;
+canvas.addEventListener('mousemove', e => {
+  const mx = e.clientX, my = e.clientY;
+  let found = null;
+  for (const node of nodes) {
+    const dx = mx - node.x, dy = my - node.y;
+    if (dx * dx + dy * dy < node.radius * node.radius) { found = node; break; }
+  }
+  if (found) {
+    canvas.style.cursor = 'pointer';
+    tooltip.style.display = 'block';
+    tooltip.style.left = (mx + 16) + 'px';
+    tooltip.style.top = (my + 16) + 'px';
+    tooltip.innerHTML = `
+      <div class="name">${found.icon} ${found.id}</div>
+      <div class="stat">📖 阅读 <span>${found.reads}</span> 次</div>
+      <div class="stat">👍 喜欢 <span>${found.likes}</span> · 👎 跳过 <span>${found.skips}</span></div>
+      <div class="stat">🔍 深潜 <span>${found.deep_dives}</span> 次</div>
+    `;
+    hovered = found;
+  } else {
+    canvas.style.cursor = 'default';
+    tooltip.style.display = 'none';
+    hovered = null;
+  }
+});
+
+let drag = null, dragOffset = {x:0, y:0};
+canvas.addEventListener('mousedown', e => {
+  if (hovered) {
+    drag = hovered;
+    dragOffset = {x: e.clientX - hovered.x, y: e.clientY - hovered.y};
+    simulation.alphaTarget(0.3).restart();
+  }
+});
+canvas.addEventListener('mousemove', e => {
+  if (drag) {
+    drag.fx = e.clientX - dragOffset.x;
+    drag.fy = e.clientY - dragOffset.y;
+  }
+});
+canvas.addEventListener('mouseup', () => {
+  if (drag) {
+    drag.fx = null;
+    drag.fy = null;
+    simulation.alphaTarget(0);
+    drag = null;
+  }
+});
+
+function resetZoom() {
+  nodes.forEach(n => { n.fx = null; n.fy = null; });
+  simulation.alpha(1).restart();
+}
+</script>
+</body>
+</html>

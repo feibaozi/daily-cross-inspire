@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>情绪反馈 · 跨界灵感</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f0f1a; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 16px; padding: 40px; max-width: 400px; text-align: center; }
+.card h1 { font-size: 48px; margin-bottom: 16px; }
+.card p { color: #aaa; line-height: 1.8; margin-bottom: 8px; }
+.card .domain { color: #4a9eff; font-weight: bold; }
+.emotion-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
+.emotion-btn { background: #1e1e3a; border: 2px solid #2a2a4a; border-radius: 12px; padding: 16px 8px; cursor: pointer; transition: all 0.2s; text-align: center; }
+.emotion-btn:hover { border-color: #4a9eff; transform: scale(1.05); }
+.emotion-btn .emoji { font-size: 28px; display: block; margin-bottom: 4px; }
+.emotion-btn .label { font-size: 12px; color: #aaa; }
+.result { display: none; margin-top: 20px; }
+.result.show { display: block; }
+</style>
+</head>
+<body>
+<div class="card" id="content">
+  <h1>🎭</h1>
+  <p>这篇文章让你感觉如何？</p>
+  <p class="domain" id="domainName"></p>
+  <div class="emotion-grid" id="emotionGrid">
+    <button class="emotion-btn" onclick="submitEmotion('amazed')"><span class="emoji">🤯</span><span class="label">震撼</span></button>
+    <button class="emotion-btn" onclick="submitEmotion('inspired')"><span class="emoji">💡</span><span class="label">受启发</span></button>
+    <button class="emotion-btn" onclick="submitEmotion('curious')"><span class="emoji">🔍</span><span class="label">好奇</span></button>
+    <button class="emotion-btn" onclick="submitEmotion('confused')"><span class="emoji">🤔</span><span class="label">困惑</span></button>
+    <button class="emotion-btn" onclick="submitEmotion('bored')"><span class="emoji">😴</span><span class="label">无聊</span></button>
+  </div>
+  <div class="result" id="result">
+    <h1 id="resultEmoji"></h1>
+    <p id="resultText"></p>
+  </div>
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const data = params.get('d');
+const labels = {amazed:'🤯 震撼',inspired:'💡 受启发',curious:'🔍 好奇',confused:'🤔 困惑',bored:'😴 无聊'};
+const emojis = {amazed:'🤯',inspired:'💡',curious:'🔍',confused:'🤔',bored:'😴'};
+
+if (!data) {
+  document.getElementById('content').innerHTML = '<h1>❌</h1><p>无效的反馈链接</p>';
+} else {
+  try {
+    const payload = JSON.parse(atob(data));
+    document.getElementById('domainName').textContent = payload.domain;
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<h1>❌</h1><p>数据解析失败</p>';
+  }
+}
+
+function submitEmotion(emotion) {
+  const emotions = JSON.parse(localStorage.getItem('dc_emotions') || '[]');
+  try {
+    const payload = JSON.parse(atob(data));
+    emotions.push({...payload, emotion, timestamp: new Date().toISOString()});
+    localStorage.setItem('dc_emotions', JSON.stringify(emotions));
+  } catch(e) {}
+
+  document.getElementById('emotionGrid').style.display = 'none';
+  const result = document.getElementById('result');
+  result.classList.add('show');
+  document.getElementById('resultEmoji').textContent = emojis[emotion] || '✅';
+  document.getElementById('resultText').textContent = `已记录：${labels[emotion] || emotion}`;
+}
+</script>
+</body>
+</html>
